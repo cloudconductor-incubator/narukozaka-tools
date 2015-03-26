@@ -1,0 +1,79 @@
+#!/bin/bash
+
+# To avoid circular sourcing.
+[[ -n "$LOAD_NARUKO_BOX" ]] && return 0 || LOAD_NARUKO_BOX=1
+
+: ${NARUKO_ROOT:?"Missing NARUKO_ROOT"}
+
+# load common functions from entry script.
+. naruko
+
+function box_find_path() {
+  local box_name=${1:?"Missing box name"}
+
+  local box_path="${NARUKO_ROOT}/boxes/${box_name}.box"
+  echo $box_path
+}
+
+# Extract .box file to current directory.
+function box_extract_box_file() {
+  local box_name=${1:?"Missing box name"}
+  tar zxf $(box_find_path ${box_name})
+}
+
+function box_list_files() {
+  find "${NARUKO_ROOT}/boxes" -name "*.box"
+}
+
+function box_list_names() {
+  box_list_files | while read i; do
+    echo "${i%*.box}"
+  done
+}
+
+is_sourced && return 0 || :
+
+#### Main part
+
+set -eu
+set -o pipefail
+
+function print_metadata() {
+  cat <<EOF
+title="Operation Box file"
+description="Long description"
+commands="download"
+EOF
+}
+
+function usage() {
+  echo "show box usage"
+}
+
+function command_download() {
+  echo "command_download"
+}
+
+if [[ $# -eq 0 ]]; then
+  subcommand="help"
+else
+  subcommand=$1
+  shift
+fi
+case $subcommand in
+"")
+    abort "ERROR: Missing command name"
+    ;;
+metadata)
+    print_metadata
+    ;;
+download)
+    command_download "$@"
+    ;;
+help)
+    usage
+    ;;
+*)
+    abort "ERROR: Unknown command: ${subcommand}"
+    ;;
+esac

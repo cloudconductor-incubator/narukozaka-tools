@@ -1,0 +1,107 @@
+#!/bin/bash
+
+# To avoid circular sourcing.
+[[ -n "$LOAD_NARUKO_NODE" ]] && return 0 || LOAD_NARUKO_NODE=1
+
+: ${NARUKO_ROOT:?"Missing NARUKO_ROOT"}
+
+# load common functions from entry script.
+. naruko
+
+function node_find_path() {
+  local node_name=${1:?"Missing node name"}
+  echo "${NARUKO_ROOT}/nodes/${node_name}"
+}
+
+function node_chdir() {
+  local node_name=${1:?"Missing node name"}
+  local node_path=$(node_find_path $node_name)
+
+  if [[ -d $node_path ]]; then
+    cd $node_path
+  else
+    abort "ERROR: Unknown node name: ${node_name}"
+  fi
+}
+
+function node_find_name_from_path() {
+  local path=${1:?"Missing path to calculate"}
+
+  # TODO: checks if absolute path is given.
+  if [[ "$path" = "${NARUKO_ROOT}/nodes/"* ]]; then
+    local node_name=${path#${NARUKO_ROOT}/nodes/}
+    if [[ -z "$node_name" ]]; then
+      return 1
+    else
+      echo ${node_name%%/}
+      return 0
+    fi
+  else
+    return 1
+  fi
+}
+
+function node_play_execscript() {
+  local node_name=${1:?"Missing node name"}
+  local mnt_path=${2:?"Missing mount path"}
+
+  node_chdir $node_name
+
+  # ensure to finish mnt_path with single "/"
+  mnt_path="${mnt_path/\/*$/}/"
+  if [[ -d guestroot ]]; then
+    rsync -avxSL guestroot/ "${mnt_path}"
+  fi
+
+  [[ -d "execscript" ]] || abort "ERROR: Can't file execscript for ${node_name}"
+
+  local es=
+  while read es; do
+    (
+      ${es} ${mnt_path}
+    )
+  done < <(find -L execscript ! -type d -name '*.sh' | sort)
+}
+
+is_sourced && return 0 || :
+
+set -eu
+set -o pipefail
+
+function print_metadata() {
+  cat <<EOF
+title="Node Operation"
+description="Long description"
+commands=""
+EOF
+}
+
+function usage() {
+  echo "show node usage"
+}
+
+function command_show() {
+  echo "command show"
+}
+
+if [[ $# -eq 0 ]]; then
+  usage
+  exit 1
+else
+  subcommand=$1
+  shift
+fi
+case $subcommand in
+metadata)
+    print_metadata
+    ;;
+show)
+    command_show "$@"
+    ;;
+help)
+    usage
+    ;;
+*)
+    abort "ERROR: Unknown command: ${subcommand}"
+    ;;
+esac

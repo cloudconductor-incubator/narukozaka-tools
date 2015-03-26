@@ -1,0 +1,8 @@
+VDC_EDGE_NETWORKING="openvnet"
+DCMGR_HOST=
+account_id=a-shpoolxx
+DCMGR_CLIENT_ADDR=
+hypervisor=kvm
+
+cpu_cores=1
+memory_size=5000

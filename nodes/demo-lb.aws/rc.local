@@ -1,0 +1,46 @@
+#!/bin/sh
+#
+# This script will be executed *after* all the other init scripts.
+# You can put your own initialization stuff in here if you don't
+# want to do the full Sys V style init stuff.
+
+set -e
+set -x
+
+ret=`ip addr show dev eth0 | grep inet | head -1 | awk '{print $2}'`
+
+src_ip_addr=${ret%/*}
+dst_ip_addr="10.0.0.136"
+
+tap_vendor_id="10:ff:00"
+
+ip link add tap-edge type gretap remote ${dst_ip_addr} local ${src_ip_addr}
+ip link set tap-edge up
+
+# interface for nw-mon network.
+ip link add link tap-edge name vlan-mon type vlan id 100
+ip link set vlan-mon up
+
+brctl addbr br-mon
+ip link set br-mon up
+ip addr add 10.0.100.10/24 dev br-mon
+brctl addif br-mon vlan-mon
+
+tunctl -p -t br-mon-low
+ip link set br-mon-low address ${tap_vendor_id}:00:00:00
+brctl addif br-mon br-mon-low
+
+# interface for nw-lbweb network.
+ip link add link tap-edge name vlan-lbweb type vlan id 120
+ip link set vlan-lbweb up
+
+brctl addbr br-lbweb
+ip link set br-lbweb up
+ip addr add 10.0.10.10/24 dev br-lbweb
+brctl addif br-lbweb vlan-lbweb
+
+tunctl -p -t br-lbweb-low
+ip link set br-lbweb-low address ${tap_vendor_id}:00:00:01
+brctl addif br-lbweb br-lbweb-low
+
+touch /var/lock/subsys/local

@@ -1,0 +1,191 @@
+#!/bin/bash
+
+# To avoid circular sourcing.
+[[ -n "$LOAD_NARUKO_DB" ]] && return 0 || LOAD_NARUKO_DB=1
+
+: ${NARUKO_ROOT:?"Missing NARUKO_ROOT"}
+
+# load common functions from entry script.
+. naruko
+
+function db_path() {
+  local db_key=${1:?"Missing db key"}
+
+  echo "${NARUKO_ROOT}/.db/${db_key}"
+}
+
+function db_add() {
+  local db_key=${1:?"Missing db key"}
+
+  local path=$(db_path "${db_key}")
+  mkdir -p $(dirname $path)
+  if [[ -f "${path}" ]]; then
+    return 1
+  fi
+  # Check if the function is piped to
+  # write some data.
+  if [[ -p /dev/stdin ]]; then
+    cat - > $path
+  else
+    : > $path
+  fi
+  git add --force $path
+  return 0
+}
+
+function db_link() {
+  local db_key=${1:?"Missing db key"}
+  local link_key=${2:?"Missing link key"}
+
+  local key_path=$(db_path $db_key)
+  local link_path=$(db_path $link_key)
+
+  if [[ ! -e $key_path ]]; then
+    return 1
+  fi
+  # calculate relative path to create symlink.
+  local up_path=
+  for x in $(dirname $link_key | tr '/' "\t"); do
+    up_path="../${up_path}"
+  done
+
+  if [[ ! -d $(dirname $link_path) ]]; then
+    mkdir -p $(dirname $link_path)
+  fi
+  # up_path ends with '/'.
+  ln -sf "${up_path}${db_key}" $link_path
+  git add --force $link_path
+}
+
+function db_branch_push() {
+  local branch_name=
+  if [[ $# -eq 0 ]]; then
+    if git symbolic-ref -q HEAD > /dev/null; then
+      branch_name=$(git symbolic-ref --short HEAD)
+    else
+      echo "ERROR: Can't guess current branch name as HEAD is not a symbolic ref." >&2
+      return 1
+    fi
+  else
+    branch_name=${1}
+  fi
+  git push origin "$(git rev-parse HEAD):${branch_name}"
+}
+
+# Merge the working branch.
+function db_branch_merge() {
+  if git rev-parse --verify NARUKO_PARENT_HEAD > /dev/null; then
+    local ref=$(git rev-parse --verify HEAD)
+    db_branch_abort
+    if ! git merge --no-ff -m "Merge .db changes" $ref; then
+      git merge --abort
+      return 1
+    fi
+  else
+    echo "ERROR: Can't find NARUKO_PARENT_HEAD." >&2
+    return 1
+  fi
+}
+
+# Start working branch referenced as .git/NARUKO_HEAD.
+function db_branch_begin() {
+  db_branch_abort
+  if git symbolic-ref -q HEAD > /dev/null; then
+    git symbolic-ref NARUKO_PARENT_HEAD $(git symbolic-ref HEAD)
+  else
+    git update-ref NARUKO_PARENT_HEAD $(git rev-parse --verify HEAD)
+  fi
+  git checkout --detach -q
+}
+
+function db_branch_abort() {
+  if git symbolic-ref -q NARUKO_PARENT_HEAD > /dev/null; then
+    git checkout -q $(git symbolic-ref --short -q NARUKO_PARENT_HEAD) || :
+    git symbolic-ref -d NARUKO_PARENT_HEAD
+  elif git rev-parse --verify NARUKO_PARENT_HEAD > /dev/null; then
+    # detached head
+    git checkout -q $(git rev-parse --verify NARUKO_PARENT_HEAD) || :
+    git update-ref -d NARUKO_PARENT_HEAD
+  fi
+}
+
+is_sourced && return 0 || :
+
+set -eu
+set -o pipefail
+
+function print_metadata() {
+  cat <<EOF
+title="DB Operation"
+description="Long description"
+commands="path link"
+EOF
+}
+
+function usage() {
+cat <<EOF
+  path <db_key>: Show real path for the key.
+  link <db_key> <link_key>: Create link for the db key.
+  branch-begin: Start working branch.
+  branch-abort: Quit from working branch and back to original branch.
+  branch-merge: Merge working branch to original branch.
+EOF
+}
+
+function command_path() {
+  local db_key=${1:?"Missing db_key parameter."}
+  db_path $db_key
+}
+
+function command_link() {
+  local db_key=${1:?"Missing db_key parameter."}
+  local link_key=${1:?"Missing db_key parameter."}
+
+  db_link $db_key $link_key
+}
+
+function command_branch_begin() {
+    db_branch_begin
+}
+
+function command_branch_merge() {
+    db_branch_merge
+}
+
+function command_branch_abort() {
+    db_branch_abort
+}
+
+if [[ $# -eq 0 ]]; then
+  usage
+  exit 1
+else
+  subcommand=$1
+  shift
+fi
+case $subcommand in
+metadata)
+    print_metadata
+    ;;
+path)
+    command_path "$@"
+    ;;
+link)
+    command_link "$@"
+    ;;
+branch-begin|branch_begin)
+    command_branch_begin
+    ;;
+branch-merge|branch_merge)
+    command_branch_merge
+    ;;
+branch-abort|branch_abort)
+    command_branch_abort
+    ;;
+help)
+    usage
+    ;;
+*)
+    abort "ERROR: Unknown command: ${subcommand}"
+    ;;
+esac

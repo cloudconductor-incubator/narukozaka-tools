@@ -1,0 +1,13 @@
+"type": "amazon-ebs",
+"access_key": "${aws_access_key}",
+"secret_key": "${aws_secret_key}",
+"region": "${aws_region}",
+"source_ami": "${ami_id}",
+"instance_type": "t1.micro",
+"ssh_username": "root",
+"ssh_timeout": "5m",
+"ami_name": "demo-zabbix.$(echo ${AMI_NAME_COMMIT_ID:?Missing AMI_NAME_COMMIT_ID} | cut --bytes=-8)",
+"tags": {
+  "COMMIT_ID": "${AMI_NAME_COMMIT_ID}",
+  "NODE_NAME": "demo-zabbix.aws"
+}

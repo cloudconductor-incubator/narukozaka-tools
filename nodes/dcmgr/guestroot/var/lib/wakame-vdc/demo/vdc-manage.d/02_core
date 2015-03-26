@@ -1,0 +1,50 @@
+# vm image (wmi-*)
+# hierarchy: bkst-XXX / bo-XXX / wmi-XXX
+
+## centos1d64
+
+backupobject add  --storage-id=bkst-demo1  --uuid=bo-centos1d64  --display-name='centos-6.4.x86_64.kvm.md.raw.tar.gz'  --object-key=centos-6.4.x86_64.kvm.md.raw.tar.gz  --size=4294967296  --allocation-size=358786927  --checksum=f80b2fdfacab912734d73765352fd50f  --container-format=tgz  --description='centos-6.4.x86_64.kvm.md.raw.tar.gz'
+image add local bo-centos1d64  --account-id a-shpoolxx  --uuid wmi-centos1d64  --arch x86_64  --description 'centos-6.4.x86_64.kvm.md.raw.tar.gz local'  --file-format raw  --root-device label:root  --service-type std  --is-public  --display-name 'centos1d64'  --is-cacheable
+image features wmi-centos1d64 --virtio
+
+## vanilla1d64
+
+backupobject add  --storage-id=bkst-demo1  --uuid=bo-vanilla1d64  --display-name='vanilla.x86_64.kvm.md.raw.tar.gz'  --object-key=vanilla.x86_64.kvm.md.raw.tar.gz  --size=4294967296  --allocation-size=360010471  --checksum=ff357680f654ac257ff9b0db5a7c6a2e  --container-format=tgz  --description='vanilla.x86_64.kvm.md.raw.tar.gz'
+image add local bo-vanilla1d64  --account-id a-shpoolxx  --uuid wmi-vanilla1d64  --arch x86_64  --description 'vanilla.x86_64.kvm.md.raw.tar.gz local'  --file-format raw  --root-device label:root  --service-type std  --is-public  --display-name 'vanilla1d64'  --is-cacheable
+image features wmi-vanilla1d64 --virtio
+
+## lbnode1d64
+
+backupobject add  --storage-id=bkst-demo1  --uuid=bo-lbnode1d64  --display-name='lbnode.x86_64.kvm.md.raw.tar.gz'  --object-key=lbnode.x86_64.kvm.md.raw.tar.gz  --size=1073741824  --allocation-size=321375400  --checksum=0209ea05856ce7f11301ad7d803683ba  --container-format=tgz  --description='lbnode.x86_64.kvm.md.raw.tar.gz'
+image add local bo-lbnode1d64  --account-id a-shpoolxx  --uuid wmi-lbnode1d64  --arch x86_64  --description 'lbnode.x86_64.kvm.md.raw.tar.gz local'  --file-format raw  --root-device label:root  --service-type std  --is-public  --display-name 'lbnode1d64'  --is-cacheable
+image features wmi-lbnode1d64 --virtio
+
+## haproxy1d64
+
+backupobject add  --storage-id=bkst-demo1  --uuid=bo-haproxy1d64  --display-name='lb-centos6-stud.x86_64.kvm.md.raw.tar.gz'  --object-key=lb-centos6-stud.x86_64.kvm.md.raw.tar.gz  --size=1073741824  --allocation-size=303040713  --checksum=ea1e7a0463996457d81a6a14e766dc4c  --container-format=tgz  --description='lb-centos6-stud.x86_64.kvm.md.raw.tar.gz'
+image add local bo-haproxy1d64  --account-id a-shpoolxx  --uuid wmi-haproxy1d64  --arch x86_64  --description 'lb-centos6-stud.x86_64.kvm.md.raw.tar.gz local'  --file-format raw  --root-device label:root  --service-type std  --is-public  --display-name 'haproxy1d64'  --is-cacheable
+image features wmi-haproxy1d64 --virtio
+
+## demo-lb
+
+backupobject add  --storage-id=bkst-demo1  --uuid=bo-demolb  --display-name='demo-lb.raw.tar.gz'  --object-key=demo-lb.raw.tar.gz  --size=441481674  --allocation-size=42949672960  --checksum=5e1ecdae4437f545b861fdc7967c2fbf  --container-format=tgz  --description='demo-lb.raw.tar.gz'
+image add local bo-demolb  --account-id a-shpoolxx  --uuid wmi-demolb  --arch x86_64  --description 'demo-lb.raw.tar.gz local'  --file-format raw  --root-device label:root  --service-type std  --is-public  --display-name 'demo-lb'  --is-cacheable
+image features wmi-demolb --virtio
+
+## demo-web
+
+backupobject add  --storage-id=bkst-demo1  --uuid=bo-demoweb  --display-name='demo-web.raw.tar.gz'  --object-key=demo-web.raw.tar.gz  --size=441492739  --allocation-size=42949672960  --checksum=7a23afafca6692ad9a1d13126ddf6737  --container-format=tgz  --description='demo-web.raw.tar.gz'
+image add local bo-demoweb  --account-id a-shpoolxx  --uuid wmi-demoweb  --arch x86_64  --description 'demo-web.raw.tar.gz local'  --file-format raw  --root-device label:root  --service-type std  --is-public  --display-name 'demo-web'  --is-cacheable
+image features wmi-demoweb --virtio
+
+## demo-db
+
+backupobject add  --storage-id=bkst-demo1  --uuid=bo-demodb  --display-name='demo-db.raw.tar.gz'  --object-key=demo-db.raw.tar.gz  --size=478384853  --allocation-size=42949672960  --checksum=6e0b94e34fc2f1f56183e2ae5297e9b5  --container-format=tgz  --description='demo-db.raw.tar.gz'
+image add local bo-demodb  --account-id a-shpoolxx  --uuid wmi-demodb  --arch x86_64  --description 'demo-db.raw.tar.gz local'  --file-format raw  --root-device label:root  --service-type std  --is-public  --display-name 'demo-db'  --is-cacheable
+image features wmi-demodb --virtio
+
+## demo-zabbix
+
+backupobject add  --storage-id=bkst-demo1  --uuid=bo-demozabbix  --display-name='demo-zabbix.raw.tar.gz'  --object-key=demo-zabbix.raw.tar.gz  --size=477931577  --allocation-size=42949672960  --checksum=6e0b94e34fc2f1f56183e2ae5297e9b5  --container-format=tgz  --description='demo-zabbix.raw.tar.gz'
+image add local bo-demozabbix  --account-id a-shpoolxx  --uuid wmi-demozabbix  --arch x86_64  --description 'demo-zabbix.raw.tar.gz local'  --file-format raw  --root-device label:root  --service-type std  --is-public  --display-name 'demo-zabbix'  --is-cacheable
+image features wmi-demozabbix --virtio

@@ -1,0 +1,73 @@
+#!/bin/sh
+#
+# This script will be executed *after* all the other init scripts.
+# You can put your own initialization stuff in here if you don't
+# want to do the full Sys V style init stuff.
+
+set -e
+set -x
+
+exec 1> /var/tmp/firstboot.log
+exec 2>> /var/tmp/firstboot.log
+
+export PATH=.:/opt/axsh/wakame-vdc/ruby/bin:${PATH}
+export HOME=/root
+
+if [ -f /var/tmp/firstboot ]; then
+  exit
+fi
+
+### initialize database
+
+for dbname in wakame_dcmgr zabbix; do
+  yes | mysqladmin -uroot drop ${dbname} || :
+  mysqladmin -uroot create ${dbname} --default-character-set=utf8
+done
+
+#### wakame-vdc
+
+for dirpath in /opt/axsh/wakame-vdc/dcmgr; do
+  cd ${dirpath}
+  /opt/axsh/wakame-vdc/ruby/bin/bundle exec rake db:init --trace
+done
+
+#### zabbix
+
+mysql -uroot <<'EOS'
+  grant all privileges on zabbix.* to zabbix@localhost identified by 'zabbix';
+  flush privileges;
+EOS
+
+##### zabbix-server 1.8
+
+#while read line; do
+#  mysql -uroot zabbix < ${line}
+#done < <(
+#  rpm -ql zabbix-server-mysql | grep schema/mysql.sql
+#  rpm -ql zabbix-server-mysql | egrep '/data/.*\.sql$'
+#)
+
+### add core data
+
+export HOME=/root
+
+sed -i "s,openvnet\strue,openvnet false," /etc/wakame-vdc/dcmgr.conf
+
+find /var/lib/wakame-vdc/demo/vdc-manage.d -type f | sort | xargs cat | egrep -v '^#|^$' | /opt/axsh/wakame-vdc/dcmgr/bin/vdc-manage
+
+sed -i "s,openvnet\sfalse,openvnet true," /etc/wakame-vdc/dcmgr.conf
+
+### prepare to start vdc-*
+
+sed -i "s,^#RUN=.*,RUN=yes," /etc/default/vdc-*
+
+# will be deleted soon.
+cd /opt/axsh/wakame-vdc
+patch -p1 < vnet-hook.patch
+
+### start services
+
+initctl start vdc-collector
+
+touch /var/tmp/firstboot
+touch /var/lock/subsys/local

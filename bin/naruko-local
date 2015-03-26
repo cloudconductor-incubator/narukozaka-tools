@@ -1,0 +1,64 @@
+#!/bin/bash
+
+# To avoid circular sourcing.
+[[ -n "$LOAD_NARUKO_LOCAL" ]] && return 0 || LOAD_NARUKO_LOCAL=1
+
+: ${NARUKO_ROOT:?"Missing NARUKO_ROOT"}
+
+# load common functions from entry script.
+. naruko
+. naruko-node
+
+is_sourced && return 0 || :
+
+#### Main part
+
+set -eu
+set -o pipefail
+
+function print_metadata() {
+  cat <<EOF
+title="Deploy local"
+description="Long description"
+commands="play"
+EOF
+}
+
+function usage() {
+  echo "show local usage"
+}
+
+function command_play() {
+  local node_name=
+  if [[ $# -eq 0 ]]; then
+    node_name=$(node_find_name_from_path $PWD) || {
+      abort "ERROR: Failed to find node name from $PWD"
+    }
+  else
+    node_name="$1"
+  fi
+
+  node_play_execscript $node_name "/"
+}
+
+if [[ $# -eq 0 ]]; then
+  usage
+  exit 1
+else
+  subcommand=$1
+  shift
+fi
+case $subcommand in
+metadata)
+    print_metadata
+    ;;
+play)
+    command_play "$@"
+    ;;
+help)
+    usage
+    ;;
+*)
+    abort "ERROR: Unknown command: ${subcommand}"
+    ;;
+esac

@@ -1,0 +1,113 @@
+# storage node (sta)
+
+storage add sta.demo1 --force --uuid sn-demo1 --base-path /opt/axsh/wakame-vdc/volumes --disk-space 1048576 --ipaddr 127.0.0.1 --storage-type raw --snapshot-base-path /opt/axsh/wakame-vdc/snap
+
+# backupstorage
+
+backupstorage add --uuid bkst-demo1 --display-name='local storage' --base-uri='file:///opt/axsh/wakame-vdc/images/' --storage-type=local --description='local backup storage under /opt/axsh/wakame-vdc/images/' --node-id="bksta.demo1"
+backupstorage add --uuid bkst-demo2 --display-name='webdav storage' --base-uri='http://localhost:8080/images/' --storage-type=webdav --description='nginx based webdav storage' --node-id="bksta.demo2"
+backupstorage add --uuid bkst-demo3 --display-name='webdav storage' --base-uri='http://localhost:8000/images/' --storage-type=webdav --description='apache based webdav storage' --node-id="bksta.demo3"
+
+# network dc
+
+network dc add public
+network dc add-network-mode public securitygroup
+network dc del-network-mode public passthrough
+
+network dc add null1
+network dc add-network-mode null1 l2overlay
+
+network dc add null2
+network dc add-network-mode null2 l2overlay
+
+network dc add management
+network dc del-network-mode management securitygroup
+network dc add-network-mode management passthrough
+
+network dc add vnet --allow-new-networks true
+network dc add-network-mode vnet l2overlay
+network dc del-network-mode vnet passthrough
+
+# network (nw-*)
+
+network add  --uuid nw-demo1 --ipv4-network 10.0.2.0   --ipv4-gw 10.0.2.2 --prefix 24 --domain vdc.local --metric  9 --service-type std --display-name "demo1" --ip-assignment "asc"
+network add  --uuid nw-demo2 --ipv4-network 10.100.0.0 --prefix 24 --domain vdc.local --metric 10 --service-type std --display-name "demo2" --ip-assignment "asc"
+network add  --uuid nw-demo3 --ipv4-network 10.101.0.0 --prefix 24 --domain vdc.local --metric 10 --service-type std --display-name "demo3" --ip-assignment "asc"
+network add  --uuid nw-demo4 --ipv4-network 10.100.0.0 --prefix 24 --domain vdc.local --metric 10 --service-type std --display-name "demo4" --ip-assignment "asc"
+network add  --uuid nw-demo5 --ipv4-network 10.101.0.0 --prefix 24 --domain vdc.local --metric 10 --service-type std --display-name "demo5" --ip-assignment "asc"
+network add  --uuid nw-demo6  --network-mode l2overlay  --ipv4-network 10.102.0.0  --ipv4-gw 10.102.0.1  --prefix 24  --domain vnet6.local  --metric 10  --service-type std  --display-name "demo6"  --ip-assignment "asc"
+network add  --uuid nw-demo7  --network-mode l2overlay  --ipv4-network 10.103.0.0  --ipv4-gw 10.103.0.1  --prefix 24  --domain vnet7.local  --metric 10  --service-type std  --display-name "demo7"  --ip-assignment "asc"
+network add  --uuid nw-demo8  --ipv4-network 10.1.0.0  --ipv4-gw 10.1.0.1  --prefix 24  --domain vnet8.local  --metric 10  --service-type lb  --display-name "demo8"  --ip-assignment "asc" --network-mode passthrough
+network add  --uuid nw-minimum --ipv4-network 10.104.0.100 --prefix 31 --domain vdc.local --metric 10 --service-type std --display-name "minimum" --ip-assignment "asc"
+
+network add  --uuid nw-mon --ipv4-network 10.0.100.0 --prefix 24 --domain nw.mon --metric 9 --service-type std --display-name "nw-mon" --ip-assignment "asc"
+network add  --uuid nw-webdb --ipv4-network 10.0.20.0 --prefix 24 --domain nw.mon --metric 9 --service-type std --display-name "nw-webdb" --ip-assignment "asc"
+network add  --uuid nw-lbweb --ipv4-network 10.0.10.0 --prefix 24 --domain nw.mon --metric 9 --service-type std --display-name "nw-lbweb" --ip-assignment "asc"
+
+# network forwarding
+
+network forward nw-demo1   public
+network forward nw-demo2   public
+network forward nw-demo3   public
+network forward nw-demo4   null1
+network forward nw-demo5   null2
+network forward nw-demo6   null1
+network forward nw-demo7   null1
+network forward nw-demo8   management
+network forward nw-minimum public
+
+network forward nw-mon    vnet
+network forward nw-webdb  vnet
+network forward nw-lbweb  vnet
+
+# network service
+
+network service dhcp nw-demo6 --ipv4=10.102.0.2
+network service dhcp nw-demo7 --ipv4=10.103.0.2
+network service dns  nw-demo7 --ipv4=10.103.0.2
+network service external-ip nw-demo1
+
+network service dhcp nw-mon --ipv4=10.0.100.1
+network service dhcp nw-webdb --ipv4=10.0.20.1
+network service dhcp nw-lbweb --ipv4=10.0.10.1
+
+# network pool
+
+network pool add --uuid="external" --display-name="external ips"
+network pool add-dcn ipp-external public
+
+
+# network dhcp ip address range
+
+network dhcp addrange nw-demo1   10.0.2.100   10.0.2.254
+network dhcp addrange nw-demo2   10.100.0.61  10.100.0.65
+network dhcp addrange nw-demo2   10.100.0.70  10.100.0.75
+network dhcp addrange nw-demo2   10.100.0.68  10.100.0.75
+network dhcp addrange nw-demo2   10.100.0.72  10.100.0.80
+network dhcp addrange nw-demo2   10.100.0.60  10.100.0.80
+network dhcp addrange nw-demo3   10.101.0.60  10.101.0.80
+network dhcp addrange nw-demo4   10.100.0.100 10.100.0.130
+network dhcp addrange nw-demo5   10.101.0.100 10.101.0.130
+network dhcp addrange nw-demo6   10.102.0.10  10.102.0.240
+network dhcp addrange nw-demo7   10.103.0.10  10.103.0.240
+network dhcp addrange nw-demo8   10.1.0.10    10.1.0.240
+network dhcp addrange nw-minimum 10.104.0.100 10.104.0.100
+
+network dhcp addrange nw-mon     10.0.100.2  10.0.100.254
+network dhcp addrange nw-webdb   10.0.20.2   10.0.20.254
+network dhcp addrange nw-lbweb   10.0.10.2   10.0.10.254
+
+# resource mapping
+
+resourcegroup map sng-shstor sn-demo1
+resourcegroup map nwg-shnet  nw-demo1
+
+# ssh keypair
+
+## should be deleted keypair dependency in LB/hva.conf.
+
+keypair add --account-id a-shpoolxx --uuid ssh-demo --private-key=/opt/axsh/wakame-vdc/tests/vdc.sh.d/pri.pem --public-key=/opt/axsh/wakame-vdc/tests/vdc.sh.d/pub.pem --description "demo key1" --service-type std --display-name "demo"
+
+# mac address range
+
+macrange add 525400 1 ffffff --uuid mr-demomacs

@@ -1,0 +1,139 @@
+#!/bin/bash
+
+# To avoid circular sourcing.
+[[ -n "$LOAD_NARUKO" ]] && return 0 || LOAD_NARUKO=1
+
+bin_path="$0"
+bin_name=$(basename ${bin_path})
+
+function abort() {
+  local exit_code=1
+  if [[ $# -eq 1 ]]; then
+    echo $1 >&2
+  elif [[ $# -eq 2 ]]; then
+    exit_code=$1
+    echo $2 >&2
+  fi
+  exit $exit_code
+}
+
+function naruko_find_root() {
+  local from_path=${1:?"Missing path to calculate from"}
+  local p=$from_path
+  (
+    while [[ -n "$p" ]]; do
+      cd $p
+      # TODO: better to identify using special marker file.
+      if [[ -d "nodes" && -d "bin" && -d "boxes" ]]; then
+        echo "$p"
+        exit 0
+      fi
+      p=${p%/*}
+    done
+    exit 1
+  )
+}
+
+function naruko_load_conf() {
+  if [[ -f ${NARUKO_ROOT}/config/naruko.conf ]]; then
+    . ${NARUKO_ROOT}/config/naruko.conf
+  fi
+}
+
+#TODO: retrieve the project root path without git.
+if [[ -n "$NARUKO_ROOT" ]]; then
+  if [[ ! -d "${NARUKO_ROOT}" ]]; then
+    abort "Invalid root path: ${NARUKO_ROOT}"
+  fi
+  PATH="${NARUKO_ROOT}/bin:$PATH"
+  export NARUKO_ROOT PATH
+  naruko_load_conf
+else
+  NARUKO_ROOT=$(naruko_find_root $PWD)
+  if [[ -z "$NARUKO_ROOT" ]]; then
+    abort "ERROR: Failed to find NARUKO_ROOT directory"
+  fi
+  if [[ $? -ne 0 ]]; then
+    abort "Can not detect the repository path. Please run in the repository directory."
+  fi
+  export NARUKO_ROOT
+  exec $NARUKO_ROOT/bin/$(basename $bin_path) "$@"
+fi
+
+
+# List available subcommands.
+function iterate_subcommands() {
+  #TODO: retrieve more bin paths
+  find "${NARUKO_ROOT}/bin/" -name "naruko-*" -executable
+}
+
+
+function is_sourced() {
+  if [[ ${#BASH_SOURCE[@]} -ge 3 ]]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+# When this file is sourced from subcommand, it avoids to run main part.
+# Common/Shared functions and variables for subcommands need to be defined
+# in above lines.
+is_sourced && return 0 || :
+
+###############
+# Main Part
+###############
+
+set -eu
+set -o pipefail
+
+function usage() {
+  cat <<USAGE
+${bin_name}:
+  ${bin_name} <command>
+
+  Commands:
+USAGE
+
+  (
+    echo "   " "help <command>: Show details for the command."
+    local c=
+    for c in $(iterate_subcommands)
+    do
+      (
+        eval "$($c metadata)"
+        local sub_bin_name=$(basename "${c}")
+        echo  "   " ${sub_bin_name#*-} ":" ${title}
+      )
+    done
+  ) | column -t -s ":"
+}
+
+function run_subcommand() {
+  local subcommand="$1"
+  shift
+  local cmd_name="naruko-${subcommand}"
+  if which $cmd_name > /dev/null; then
+    ${cmd_name} "$@"
+  else
+    abort "ERROR: Can not find or execute ${cmd_name}"
+  fi
+}
+
+if [[ $# -eq 0 ]]; then
+  subcommand="help"
+else
+  subcommand="$1"
+  shift
+fi
+
+case $subcommand in
+help)
+    usage
+    exit 0
+    ;;
+*)
+    run_subcommand "${subcommand}" "$@"
+    ;;
+esac

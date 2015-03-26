@@ -1,0 +1,51 @@
+#!/bin/bash
+#
+# requires:
+#  bash
+#
+set -e
+set -x
+
+exec > >(tee /var/log/vdc-firstboot.log) 2>&1
+
+
+function show_timestamp() {
+  local message=${1:-'>>>'}
+  echo "#[timestamp](${message})" $(date +%FT%X.%N)
+}
+
+### initialize database
+
+for dbname in wakame_dcmgr; do
+  yes | mysqladmin -uroot drop ${dbname} || :
+  mysqladmin -uroot create ${dbname} --default-character-set=utf8
+done
+show_timestamp
+
+#### wakame-vdc
+
+for dirpath in /opt/axsh/wakame-vdc/dcmgr; do
+  cd ${dirpath}
+  /opt/axsh/wakame-vdc/ruby/bin/bundle exec rake db:init --trace
+done
+show_timestamp
+
+
+### add core data
+
+export HOME=/root
+
+find /var/lib/wakame-vdc/demo/vdc-manage.d/ -type f | sort | xargs cat | egrep -v '^#|^$' | /opt/axsh/wakame-vdc/dcmgr/bin/vdc-manage
+show_timestamp
+
+### prepare to start vdc-*
+
+sed -i "s,^#RUN=.*,RUN=yes," /etc/default/vdc-*
+
+
+### start services
+
+initctl start vdc-dcmgr
+initctl start vdc-collector
+
+show_timestamp end

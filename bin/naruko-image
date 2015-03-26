@@ -1,0 +1,300 @@
+#!/bin/bash
+
+# To avoid circular sourcing.
+[[ -n "$LOAD_NARUKO_IMAGE" ]] && return 0 || LOAD_NARUKO_IMAGE=1
+
+: ${NARUKO_ROOT:?"Missing NARUKO_ROOT"}
+
+# load common functions from entry script.
+. naruko
+. naruko-box
+. naruko-node
+. naruko-db
+
+is_sourced && return 0 || :
+
+set -eu
+set -o pipefail
+
+function print_metadata() {
+  cat <<EOF
+title="Image Operation"
+description="Long description"
+commands="build"
+EOF
+}
+
+function usage() {
+  echo "show image usage"
+}
+
+# Recursively load and merge config files with the given name.
+# It is recommended to use in sub-shell not to overwrite
+# shell variables.
+# Order to load files;
+#   1. NARUKO_ROOT/config/<conf_name>
+#   2. NARUKO_ROOT/nodes/<node_name>/config/<conf_name>
+#   3. ~/.naruko/<conf_name>
+function node_load_config() {
+  local conf_name=${1:?"Missing configuration name"}
+  local node_name=${2:?"Missing node name"}
+
+  if [[ -f ${NARUKO_ROOT}/config/${conf_name} ]]; then
+    . ${NARUKO_ROOT}/config/${conf_name}
+  fi
+  if [[ -f ${NARUKO_ROOT}/nodes/${node_name}/config/${conf_name} ]]; then
+    . ${NARUKO_ROOT}/nodes/${node_name}/config/${conf_name}
+  fi
+  # Secure parameters should not be kept in repository.
+  # e.g. API credentials or private key path.
+  set +u
+  if [[ -n "$project_conf_root" ]]; then
+    if [[ -f ${project_conf_root}/${conf_name} ]]; then
+      . ${project_conf_root}/${conf_name}
+    fi
+  fi
+  set -u
+  local user_conf_root="${HOME}/.naruko"
+  if [[ -f ${user_conf_root}/${conf_name} ]]; then
+    . ${user_conf_root}/${conf_name}
+  fi
+}
+
+function _packer_build() {
+  local node_name=${1:?"Missing node name"}
+  local ref=$(git rev-parse HEAD)
+  local tar_url=
+  local git_remote=$(git remote -v | grep origin | awk '{print $2; exit;}')
+  if [[ $git_remote =~ "github.com" ]]; then
+    # TODO: checks remote URL starts with "https://"
+    tar_url="${git_remote%.git}/archive/${ref}.tar.gz"
+    # the name of archive file which github returns.
+    local repo_name=$(basename ${git_remote})
+    local tar_base_name="${repo_name%.git}-${ref}"
+  else
+    abort "ERROR: Only supports github repository URL using https: ${git_remote}"
+  fi
+  local branch_name=$(git symbolic-ref -q HEAD || echo "(no branch)")
+  branch_name=${branch_name#refs/heads/*}
+  set +u
+  # Jenkins does not change local branch name as default so that
+  # it assumes from env value.
+  if [[ -n "$JENKINS_HOME" && -n "$GIT_BRANCH" ]]; then
+    branch_name=${GIT_BRANCH}
+  fi
+  set -u
+  if [[ $branch_name = "(no branch)" ]]; then
+    abort "ERROR: Can not assume git branch name to be pushed."
+  fi
+
+  set +u
+  if [[ -n "$packer_path" ]]; then
+    if [[ -d "$packer_path" ]]; then
+      PATH="$packer_path:$PATH"
+    else
+      abort "ERROR: packer_path ${packer_path} is not directory for packer binaries"
+    fi
+  fi
+  set -u
+
+  local builder_json=$(eval "echo \"$(cat config/packer-builder.json | sed 's/\"/\\\"/g')\"")
+  cat <<EOF > build.json
+{
+  "builders": [{
+    ${builder_json}
+  }],
+ "provisioners": [{
+    "type": "shell",
+    "inline": [
+      "set -xe",
+      "curl -OL '$tar_url'",
+      "pwd; ls;",
+      "tar zxvf ${ref}.tar.gz",
+      "cd ${tar_base_name}",
+      "./bin/naruko local play ${node_name}",
+      "cd ../",
+      "rm -rf ${tar_base_name}"
+    ]
+  }]
+}
+EOF
+  packer validate build.json
+  # Ensure line based buffering to see log in real time from tee.
+  stdbuf -o L -e L packer build -machine-readable build.json | tee packer.log
+
+  # Find the line like:
+  #  1421756083,amazon-ebs,artifact,0,id,us-east-1:ami-xxxxxx
+  awk -F, 'NF == 6 && $3 == "artifact" && $5 == "id" { print $6 }' < packer.log | while read n; do
+    local built_aws_region=${n%:*}
+    local built_ami_id=${n#*:}
+    cat <<EOF | db_add "aws/${built_aws_region}/${built_ami_id}"
+node_name=${node_name}
+EOF
+    db_link "aws/${built_aws_region}/${built_ami_id}" "nodes/${node_name}/aws_images/${built_aws_region}.${built_ami_id}"
+
+    git commit -m "New AMI: ${built_ami_id} in ${built_aws_region}"
+  done
+}
+
+function _kemumaki_build() {
+  box_extract_box_file ${box:?"Missing box parameter"}
+  sudo ${NARUKO_ROOT}/nodes/common/kemumaki-init.sh
+}
+
+function command_build() {
+  local node_name=
+  if [[ $# -eq 0 ]]; then
+    node_name=$(node_find_name_from_path $PWD) || {
+      abort "ERROR: Failed to find node name from $PWD"
+    }
+  else
+    node_name="$1"
+  fi
+
+  (
+    node_chdir $node_name
+    node_load_config "box.conf" "$node_name"
+    case ${build_driver:?"Missing build_driver parameter"} in
+      kemumaki)
+        _kemumaki_build
+        ;;
+      packer)
+        node_load_config "packer.conf" "$node_name"
+        _packer_build "$node_name"
+        ;;
+      *)
+        abort "Unknown build driver: ${build_driver}"
+        ;;
+    esac
+  )
+}
+
+function command_show() {
+  local node_name=
+  if [[ $# -eq 0 ]]; then
+    node_name=$(node_find_name_from_path $PWD) || {
+      abort "ERROR: Failed to find node name from $PWD"
+    }
+  else
+    node_name="$1"
+  fi
+}
+
+function command_show_last_build_image() {
+  local node_name=
+  if [[ $# -eq 0 ]]; then
+    node_name=$(node_find_name_from_path $PWD) || {
+      abort "ERROR: Failed to find node name from $PWD"
+    }
+  else
+    node_name="$1"
+  fi
+
+  (
+    node_chdir $node_name
+
+    node_load_config "box.conf" "$node_name"
+    case ${build_driver:?"Missing build_driver parameter"} in
+      kemumaki)
+        # TODO: show last build image information.
+        ;;
+      packer)
+        node_load_config "packer.conf" "$node_name"
+        local node_ami_dir=$(db_path "nodes/${node_name}/aws_images")
+        if [[ -d $node_ami_dir ]]; then
+          local last_ami_idx=$(git log --oneline --name-status --topo-order -- $node_ami_dir | awk '$1 == "A" {print $2; exit 0;}')
+          if [[ -z $last_ami_idx ]]; then
+            abort "ERROR: No image building history for ${node_name}"
+          fi
+          # .db/nodes/<node name>/aws_images/us-east-1.ami-xxxxxx
+          basename $last_ami_idx
+        else
+          abort "ERROR: No image building history for ${node_name}"
+        fi
+        ;;
+      *)
+        abort "Unknown build driver: ${build_driver}"
+        ;;
+    esac
+  )
+}
+
+function command_tag() {
+  local node_name=
+  if [[ $# -lt 3 ]]; then
+    node_name=$(node_find_name_from_path $PWD) || {
+      abort "ERROR: Failed to find node name from $PWD"
+    }
+  else
+    node_name="$1"
+    shift
+  fi
+  local tag_name="$1" image_id="$2"
+  shift; shift;
+
+  (
+    node_chdir $node_name
+
+    node_load_config "box.conf" "$node_name"
+    case ${build_driver:?"Missing build_driver parameter"} in
+      kemumaki)
+        # TODO: show last build image information.
+        ;;
+      packer)
+        node_load_config "packer.conf" "$node_name"
+        if [[ $image_id =~ "." ]]; then
+          # assume it is absolute ID. "us-east-1.ami-xxxx"
+          local image_id_path=$(db_path "nodes/${node_name}/aws_images/${image_id}")
+          if [[ ! -e $image_id_path ]]; then
+            abort "ERROR: Can not find the image ID: $image_id}"
+          fi
+        else
+          # Find image ID path from AMI only string.
+          local node_ami_dir=$(db_path "nodes/${node_name}/aws_images")
+          local image_id_path=$(find ${node_ami_dir} -name "*.${image_id}")
+          if [[ -z $image_id_path ]]; then
+            abort "ERROR: Not found such ID: ${image_id}"
+          elif [[ $(echo "$image_id_path" | wc -l) -gt 1 ]]; then
+            abort "ERROR: Found multiple IDs."
+          fi
+        fi
+        # nodes/xxxx/tags/tag1 -> ../../aws_images/us-east-1.ami-xxxx
+        db_link "nodes/${node_name}/aws_images/$(basename ${image_id_path})" "nodes/${node_name}/tags/${tag_name}"
+        ;;
+      *)
+        abort "Unknown build driver: ${build_driver}"
+        ;;
+    esac
+  )
+}
+
+if [[ $# -eq 0 ]]; then
+  usage
+  exit 1
+else
+  subcommand=$1
+  shift
+fi
+case $subcommand in
+metadata)
+    print_metadata
+    ;;
+build)
+    command_build "$@"
+    ;;
+tag)
+    command_tag "$@"
+    ;;
+show)
+    command_show "$@"
+    ;;
+show-last)
+    command_show_last_build_image "$@"
+    ;;
+help)
+    usage
+    ;;
+*)
+    abort "ERROR: Unknown command: ${subcommand}"
+    ;;
+esac

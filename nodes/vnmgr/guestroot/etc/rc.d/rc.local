@@ -1,0 +1,25 @@
+#!/bin/sh
+#
+# This script will be executed *after* all the other init scripts.
+# You can put your own initialization stuff in here if you don't
+# want to do the full Sys V style init stuff.
+
+set -e
+set -x
+
+if [ -f /var/tmp/firstboot ]; then
+  exit
+fi
+
+exec 1> /var/tmp/firstboot.log
+exec 2>> /var/tmp/firstboot.log
+
+export PATH=.:/opt/axsh/openvnet/ruby/bin:${PATH}
+export HOME=/root
+
+/opt/axsh/vnetscript/01-init-database.sh
+/opt/axsh/vnetscript/02-start-vnmgr-webapi.sh
+/opt/axsh/vnetscript/03-setup-openvnet.sh
+
+touch /var/tmp/firstboot
+touch /var/lock/subsys/local
